@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 - hosts: primary
   tasks:
     - name: Create nodepool directory
@@ -50,6 +49,12 @@
       copy:
         dest: /etc/nodepool/node_private
         content: "{{ nodepool.private_ipv4 }}"
+
+- include: create-ceph-disks.yaml
+  when: ceph_pv.storage == "device"
+
+- hosts: primary
+  tasks:
     - name: Run OSH Deploy
       shell: |
         set -xe;
@@ -60,6 +65,9 @@
         export KUBECONFIG=${HOME}/.kube/config
         export SDN_PLUGIN="{{ sdn_plugin }}"
         export GLANCE="{{ glance_backend }}"
+        export LOOPBACK_DEV_YAML="ceph/ceph-block-devices-merged-values.yaml"
+        export CEPH_STORAGE="{{ ceph_pv.storage }}"
+        export OSD_JOURNAL_SIZE="{{ ceph_pv.journal_size | default('') }}"
         kubectl get nodes -o wide
         ./tools/gate/setup_gate.sh
       args:

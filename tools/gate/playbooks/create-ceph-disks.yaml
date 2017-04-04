@@ -1,0 +1,113 @@
+# Our tests for Ceph create iSCSI devices on all hosts and attach to them via a
+# local connection.  The resulting devices are used as OSDs and journals.
+# Configuration is via the ceph_pv dictionary in .zuul.yaml:
+#
+#   - ceph_pv.storage: if "device", use this playbook.
+#   - ceph_pv.osds: the number of OSDs to create on each host
+#   - ceph_pv.osd_size: the OSD device size, in megabytes
+#   - ceph_pv.journal_size: the journal device size, in megabytes.
+#
+# most of the work for this playbook is done by functions in
+# tools/gate/ceph-block-device-functions.sh. See that file for additional
+# documentation
+
+- hosts: all
+  tasks:
+    # we're currently using a subdirectory of tests/ as a working directory
+    # to build the device lists.  This was chosen because it's ignored by
+    # the makefile and it avoids writing outside the working tree.
+    - name: Create block device working directory
+      file:
+        path: "{{ zuul.project.src_dir }}/tests/ceph-loopback-device-build"
+        state: directory
+        mode: 0755
+
+    - name: Create block device merge directory
+      file:
+        path: "{{ zuul.project.src_dir }}/tests/ceph-loopback-device-build/merge"
+        state: directory
+        mode: 0755
+      when: inventory_hostname == "primary"
+
+    - name: Install packages for loopback device creation
+      become: true
+      become_user: root
+      package:
+        name: "{{ item }}"
+        state: latest
+      with_items:
+        - targetcli
+        - lshw
+
+    - name: Install OS specific packages
+      become: true
+      become_user: root
+      package:
+        name: "{{ item }}"
+        state: latest
+      with_items:
+        - open-iscsi
+      when: ansible_distribution == "Ubuntu"
+
+    - name: Install OS specific packages
+      become: true
+      become_user: root
+      package:
+        name: "{{ item }}"
+        state: latest
+      with_items:
+        - iscsi-initiator-utils
+        - dbus-python
+      when: ansible_distribution == "CentOS" or ansible_distribution == "Fedora"
+
+    - name: Create drives on all nodes
+      become: true
+      become_user: root
+      shell:  |
+        set -xe;
+        ./tools/gate/ceph-block-device-functions.sh ceph_device_pair_create "{{ ceph_pv.osd_size }}" "{{ ceph_pv.journal_size }}" "{{ ceph_pv.osds }}" > "tests/ceph-loopback-device-build/loopback-devices.host-{{ inventory_hostname }}"
+      args:
+        chdir: "{{ zuul.project.src_dir }}"
+
+    - name: Collect block device files
+      fetch:
+        src:  "{{ zuul.project.src_dir }}/tests/ceph-loopback-device-build/loopback-devices.host-{{ inventory_hostname }}"
+        dest: "{{ zuul.project.src_dir }}/tests/ceph-loopback-device-build/host-device-files/"
+        flat: yes
+
+- hosts: primary
+  tasks:
+    - name: Ship block device files to primary for assembly
+      copy:
+        src: "{{ zuul.project.src_dir }}/tests/ceph-loopback-device-build/host-device-files/loopback-devices.host-{{ item }}"
+        dest: "{{ zuul.project.src_dir }}/tests/ceph-loopback-device-build/merge/loopback-devices.host-{{ item }}"
+      with_items:
+        - "{{ groups['all'] }}"
+
+    - name: Collate node Ceph device data
+      assemble:
+        src: "{{ zuul.project.src_dir }}/tests/ceph-loopback-device-build/merge"
+        dest: "{{ zuul.project.src_dir }}/tests/ceph-loopback-device-build/ceph-disks-unified"
+
+    - name: Showing contents of ceph-loopback-device-build and unified device file
+      shell: |
+        set -xe;
+        ls -lR ceph-loopback-device-build/;
+        cat ceph-loopback-device-build/ceph-disks-unified;
+      args:
+        chdir: "{{ zuul.project.src_dir }}/tests"
+
+    - name: Label nodes for OSDs
+      shell: |
+        set -xe;
+        export KUBECONFIG=${HOME}/.kube/config
+        ./tools/gate/ceph-block-device-functions.sh ceph_label_device_hosts tests/ceph-loopback-device-build/ceph-disks-unified
+      args:
+        chdir: "{{ zuul.project.src_dir }}"
+
+    - name: Build Ceph block_devices values section
+      shell: |
+        set -xe;
+        ./tools/gate/ceph-block-device-functions.sh ceph_merge_device_values tests/ceph-loopback-device-build/ceph-disks-unified > ceph/ceph-block-devices-merged-values.yaml
+      args:
+        chdir: "{{ zuul.project.src_dir }}"

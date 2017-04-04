@@ -77,6 +77,11 @@
     vars:
       sdn_plugin: ovs
       glance_backend: radosgw
+      ceph_pv:
+        storage: device
+        osds: 3
+        osd_size: 32768
+        journal_size: 5120
     nodeset: openstack-helm-ubuntu
 
 - job:
@@ -85,4 +90,10 @@
     vars:
       sdn_plugin: linuxbridge
       glance_backend: radosgw
+      # ceph device sizes are in megabytes
+      ceph_pv:
+        storage: device
+        osds: 3
+        osd_size: 32768
+        journal_size: 5120
     nodeset: openstack-helm-ubuntu

@@ -23,10 +23,24 @@ helm_build
 helm search
 
 if [ "x$PVC_BACKEND" == "xceph" ]; then
+
   if [ "x$INTEGRATION" == "xmulti" ]; then
     SUBNET_RANGE="$(find_multi_subnet_range)"
   else
     SUBNET_RANGE=$(find_subnet_range)
+  fi
+
+  if [ "x$LOOPBACK_CREATE" == "xtrue" ]; then
+    if [ ! -z "$LOOPBACK_DEV_YAML}" ]; then
+      LOOPBACK_VALUES="--values=${LOOPBACK_DEV_YAML}"
+    else
+      LOOPBACK_VALUES=''
+    fi
+    if [ ! -z "${OSD_JOURNAL_SIZE}" ]; then
+      JOURNAL_SIZE="--set conf.ceph.config.osd.journal_size=${OSD_JOURNAL_SIZE}"
+    else
+      JOURNAL_SIZE=""
+    fi
   fi
 
   if [ "x$INTEGRATION" == "xaio" ]; then
@@ -42,8 +56,7 @@ if [ "x$PVC_BACKEND" == "xceph" ]; then
       --set deployment.rbd_provisioner=true \
       --set deployment.client_secrets=false \
       --set deployment.rgw_keystone_user_and_endpoints=false \
-      --set bootstrap.enabled=true \
-      --values=${WORK_DIR}/tools/overrides/mvp/ceph.yaml
+      --set bootstrap.enabled=true ${LOOPBACK_VALUES} ${JOURNAL_SIZE}
   else
     helm install --namespace=ceph ${WORK_DIR}/ceph --name=ceph \
       --set endpoints.identity.namespace=openstack \
@@ -57,7 +70,8 @@ if [ "x$PVC_BACKEND" == "xceph" ]; then
       --set deployment.rbd_provisioner=true \
       --set deployment.client_secrets=false \
       --set deployment.rgw_keystone_user_and_endpoints=false \
-      --set bootstrap.enabled=true
+      --set manifests_enabled.client_secrets=false \
+      --set bootstrap.enabled=true ${LOOPBACK_VALUES} ${JOURNAL_SIZE}
   fi
 
   kube_wait_for_pods ceph ${POD_START_TIMEOUT_CEPH}

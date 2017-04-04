@@ -80,10 +80,8 @@ function kubeadm_aio_reqs_install {
     sudo yum install -y \
             epel-release
     sudo yum install -y \
-            docker-latest
-    # We need JQ 1.5 which is not currently in the CentOS or EPEL repos
-    sudo curl -L -o /usr/bin/jq https://github.com/stedolan/jq/releases/download/jq-1.5/jq-linux64
-    sudo chmod +x /usr/bin/jq
+            docker-latest \
+            jq
     sudo cp -f /usr/lib/systemd/system/docker-latest.service /etc/systemd/system/docker.service
     sudo sed -i "s|/var/lib/docker-latest|/var/lib/docker|g" /etc/systemd/system/docker.service
     sudo sed -i 's/^OPTIONS/#OPTIONS/g' /etc/sysconfig/docker-latest
@@ -145,13 +143,12 @@ function kubeadm_aio_clean {
       /var/lib/nfs-provisioner || true
 }
 
-function kube_label_node_block_devs {
-  for HOST in $(cat $LOOPBACK_DEV_INFO | yaml_to_json | jq -r ".block_devices | keys? | .[]"); do
-    for DEV_TYPE in $(cat $LOOPBACK_DEV_INFO | yaml_to_json | jq -r ".block_devices.\"$HOST\" |  keys? | .[]"); do
-      DEV_ADDRS=$(cat $LOOPBACK_DEV_INFO | yaml_to_json | jq -r ".block_devices.\"$HOST\".\"$DEV_TYPE\" | .[]")
-      for DEV_ADDR in $(cat $LOOPBACK_DEV_INFO | yaml_to_json | jq -r ".block_devices.\"$HOST\".\"$DEV_TYPE\" | .[]"); do
-        kubectl label node $HOST device-$DEV_TYPE-$(echo $DEV_ADDR | tr '@' '_' | tr ':' '-' )=enabled
-      done
-    done
+# This function lables nodes based on CEPH_OSD_DIRECTORY_DEFAULT_LABELS
+# in vars.sh. Ideally, this should be done individually on each node. This is
+# for gates
+function kube_label_node_directories {
+  echo ${CEPH_OSD_DIRECTORY_DEFAULT_LABELS} | sed -n 1'p' | tr ',' '\n' | while read label; \
+  do
+    kubectl label nodes cephosd-directory-$label=enabled --all
   done
 }

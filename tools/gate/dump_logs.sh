@@ -40,6 +40,14 @@ kubectl get pods -a --all-namespaces -o json | jq -r \
   '.items[].metadata | .namespace + " " + .name' | while read line; do
   NAMESPACE=$(echo $line | awk '{print $1}')
   NAME=$(echo $line | awk '{print $2}')
+
+  kubectl get --namespace $NAMESPACE pod $NAME -o json | jq -r \
+    '.spec.initContainers[].name' | while read line; do
+      CONTAINER=$(echo $line | awk '{print $1}')
+      kubectl logs $NAME --namespace $NAMESPACE -c $CONTAINER > \
+        ${LOGS_DIR}/k8s/pods/$NAMESPACE-$NAME-init-$CONTAINER.txt
+  done
+
   kubectl get --namespace $NAMESPACE pod $NAME -o json | jq -r \
     '.spec.containers[].name' | while read line; do
       CONTAINER=$(echo $line | awk '{print $1}')

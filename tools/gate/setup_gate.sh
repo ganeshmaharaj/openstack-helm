@@ -30,6 +30,11 @@ source ${WORK_DIR}/tools/gate/funcs/kube.sh
 rm -rf ${LOGS_DIR} || true
 mkdir -p ${LOGS_DIR}
 
+function dump_logs () {
+  ${WORK_DIR}/tools/gate/dump_logs.sh
+}
+trap 'dump_logs "$?"' ERR
+
 # Moving the ws-linter here to avoid it blocking all the jobs just for ws
 if [ "x$INTEGRATION_TYPE" == "xlinter" ]; then
   bash ${WORK_DIR}/tools/gate/whitespace.sh
@@ -67,8 +72,12 @@ else
   # Pull all required images
   cd ${WORK_DIR}; make pull-all-images
   if [ "x$LOOPBACK_CREATE" == "xtrue" ]; then
-    loopback_dev_info_collect
-    kube_label_node_block_devs
+    # loopback_dev_info_collect will assemble device info
+    # from each node, merge it all into a values yaml file,
+    # and label gate nodes for the OSD pods they support.
+    echo Everything for loopback device is already complete
+  else
+    kube_label_node_directories
   fi
   # Deploy OpenStack-Helm
   if ! [ "x$INTEGRATION_TYPE" == "x" ]; then
@@ -88,5 +97,7 @@ else
      bash ${WORK_DIR}/tools/gate/openstack/vm_cli_launch.sh
      bash ${WORK_DIR}/tools/gate/openstack/vm_heat_launch.sh
     fi
+    # Collect all logs from the environment
+    bash ${WORK_DIR}/tools/gate/dump_logs.sh 0
   fi
 fi

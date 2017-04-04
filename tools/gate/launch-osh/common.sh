@@ -19,6 +19,7 @@ source ${WORK_DIR}/tools/gate/funcs/kube.sh
 source ${WORK_DIR}/tools/gate/funcs/network.sh
 
 if [ "x$PVC_BACKEND" == "xceph" ]; then
+  kubectl label nodes openstack-control-plane=enabled --all --overwrite
   kubectl label nodes ceph-mon=enabled --all --overwrite
   kubectl label nodes ceph-osd=enabled --all --overwrite
   kubectl label nodes ceph-mds=enabled --all --overwrite
