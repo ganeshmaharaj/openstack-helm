@@ -1,0 +1,35 @@
+- name: Create drives on all nodes
+  script: ./tools/gate/ceph-block-device-functions.sh ceph_device_pair_create 8092 2048
+  args:
+    chdir: "{{ zuul.project.src_dir }}"
+  register: {{ inventory_hostname }}-disk-values
+
+- name: Label the nodes for OSDs
+  script: ./tools/gate/ceph-block-device-functions.sh ceph_label_device_hosts {{ inventory_hostname }}-disk-values
+  args:
+    chdir: "{{ zuul.project.src_dir }}"
+
+- name: Create tmpfile on host to hold all ceph disk data
+  tempfile:
+    suffix: tmp
+  register: ceph_disks_unified_data_tmp
+  when: {{ inventory_hostname }} == "primary"
+
+- name: Create yaml file to host the values
+  tempfile:
+    suffix: yaml
+  register: ceph_disks_unified
+  when: {{ inventory_hostname }} == "primary"
+
+- name: Collate all the disc data into one file
+  blockinfile:
+    path: {{ ceph_disks_unified_data_tmp }}
+    insertafter: EOF
+    content: {{ inventory_hostname}}-disk-values
+
+- name: Get ceph helm yaml addon
+  script: ./tools/gate/ceph-block-device-functions.sh ceph_merge_device_values {{ ceph_disks_unified_data_tmp }}
+  args:
+    chdir {{ zuul.project.src_dir }}
+  register: {{ ceph_disks_unified }}
+  when: {{ inventory_hostname }} == "primary"

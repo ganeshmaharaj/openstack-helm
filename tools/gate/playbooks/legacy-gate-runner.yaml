@@ -12,6 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# Run the yaml to generate ceph disks prior to starting the deployment of the
+# gate setup.
+- hosts: all
+  tasks:
+    - include_tasks: create-ceph-disks.yaml
+
 - hosts: primary
   tasks:
     - name: Create nodepool directory
